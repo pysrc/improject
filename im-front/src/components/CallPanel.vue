@@ -88,6 +88,12 @@
             <component :is="videoEnabled ? VideocamOutline : VideocamOffOutline" />
           </template>
         </n-button>
+        <!-- 最小化按钮（仅视频通话） -->
+        <n-button v-if="callType === 'video'" type="default" circle @click="handleMinimize">
+          <template #icon>
+            <RemoveOutline />
+          </template>
+        </n-button>
         <!-- 视频/投屏模式显示全屏按钮 -->
         <n-button v-if="callType === 'video' || callType === 'screen'" :type="isFullscreen ? 'warning' : 'primary'" circle @click="toggleFullscreen">
           <template #icon>
@@ -105,12 +111,13 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted, onMounted } from 'vue'
+import { ref, watch, onUnmounted, onMounted, nextTick } from 'vue'
 import { useMessage } from 'naive-ui'
-import { CallOutline, CloseOutline, MicOutline, MicOffOutline, VideocamOutline, VideocamOffOutline, ExpandOutline, ContractOutline } from '@vicons/ionicons5'
+import { CallOutline, CloseOutline, MicOutline, MicOffOutline, VideocamOutline, VideocamOffOutline, ExpandOutline, ContractOutline, RemoveOutline } from '@vicons/ionicons5'
 import WebRTCManager from '@/utils/webrtc'
 import { webrtcApi } from '@/api/modules'
 import { ringtone } from '@/utils/ringtone'
+import { useChatStore } from '@/stores/chat'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -124,6 +131,7 @@ const props = defineProps({
 const emit = defineEmits(['update:show', 'hangup', 'signal'])
 
 const naiveMessage = useMessage()
+const chatStore = useChatStore()
 const visible = ref(props.show)
 const callState = ref('idle') // idle/calling/incoming/connected/ended
 const audioEnabled = ref(true)
@@ -142,9 +150,19 @@ let durationTimer = null
 watch(() => props.show, (val) => {
   visible.value = val
   if (val) {
-    initCall()
+    // 如果有保存的webrtc数据，说明是从最小化恢复
+    if (chatStore.callWebrtcData.webrtc) {
+      // 恢复视频显示
+      restoreVideoDisplay()
+    } else {
+      // 新通话，初始化
+      initCall()
+    }
   } else {
-    endCall()
+    // 只有当不是最小化状态时才结束通话
+    if (!chatStore.callState.isMinimized) {
+      endCall()
+    }
   }
 })
 
@@ -158,6 +176,8 @@ function initCall() {
   // 设置回调
   webrtc.onRemoteStream = (stream) => {
     console.log('[WebRTC] Remote stream received')
+    // 保存远程视频流
+    chatStore.saveCallWebrtcData({ remoteStream: stream })
     // 使用 setTimeout 确保 DOM 已渲染
     setTimeout(() => {
       if (remoteVideoRef.value) {
@@ -180,6 +200,8 @@ function initCall() {
     console.log('[WebRTC] Connection state:', state)
     if (state === 'connected') {
       callState.value = 'connected'
+      // 保存webrtc实例
+      chatStore.saveCallWebrtcData({ webrtc: webrtc })
       startDurationTimer()
     } else if (state === 'disconnected' || state === 'closed' || state === 'failed') {
       handleCallEnded()
@@ -208,6 +230,51 @@ function initCall() {
   }
 }
 
+// 从最小化恢复时恢复视频显示
+function restoreVideoDisplay() {
+  callState.value = 'connected'
+  // 从store恢复webrtc实例
+  webrtc = chatStore.callWebrtcData.webrtc
+
+  // 检查WebRTC连接状态
+  if (webrtc?.peerConnection) {
+    console.log('[CallPanel] WebRTC connection state:', webrtc.peerConnection.connectionState)
+  }
+
+  // 优先从webrtc实例获取远程流，这样更可靠
+  const remoteStream = webrtc?.remoteStream || chatStore.callWebrtcData.remoteStream
+
+  // 等待DOM准备好
+  nextTick(() => {
+    if (remoteStream && remoteVideoRef.value) {
+      // 确保音频轨道是启用的
+      remoteStream.getAudioTracks().forEach(track => {
+        track.enabled = true
+        console.log('[CallPanel] Audio track enabled:', track.id, track.enabled)
+      })
+      remoteVideoRef.value.srcObject = remoteStream
+      // 确保视频元素不是静音的
+      remoteVideoRef.value.muted = false
+      // 触发播放（某些浏览器需要）
+      remoteVideoRef.value.play().catch(e => console.log('[CallPanel] Play error:', e))
+    }
+    // 恢复本地视频流
+    const localStream = webrtc?.localStream || chatStore.callWebrtcData.localStream
+    if (localStream && localVideoRef.value) {
+      localVideoRef.value.srcObject = localStream
+      // 本地视频始终静音（避免回声）
+      localVideoRef.value.muted = true
+    }
+  })
+
+  // 恢复通话时长
+  callDuration.value = chatStore.callWebrtcData.duration
+  // 恢复计时器
+  if (!durationTimer) {
+    startDurationTimer()
+  }
+}
+
 async function startCall() {
   callState.value = 'calling'
 
@@ -219,6 +286,9 @@ async function startCall() {
     // 获取本地媒体流
     const stream = await webrtc.getLocalStream(props.callType)
     console.log('[WebRTC] Local stream obtained, tracks:', stream.getTracks().map(t => t.kind))
+
+    // 保存本地视频流
+    chatStore.saveCallWebrtcData({ localStream: stream })
 
     // 延迟设置本地视频，确保 DOM 已渲染
     setTimeout(() => {
@@ -261,6 +331,9 @@ async function handleAccept() {
     // 接收方不更新 callType，保持为原始值以便正确显示投屏内容
     const stream = await webrtc.getLocalStream(streamType, false)
     console.log('[WebRTC] Local stream obtained, type:', streamType, 'tracks:', stream.getTracks().map(t => t.kind))
+
+    // 保存本地视频流
+    chatStore.saveCallWebrtcData({ localStream: stream })
 
     // 延迟设置本地视频，确保 DOM 已渲染（投屏接收方不显示本地视频）
     setTimeout(() => {
@@ -345,9 +418,22 @@ function toggleMainVideo() {
   isMainLocal.value = !isMainLocal.value
 }
 
+// 最小化通话（切换到小窗模式）
+function handleMinimize() {
+  if (props.callType !== 'video') return
+
+  // 保存当前通话时长
+  chatStore.updateCallDuration(callDuration.value)
+
+  // 最小化
+  chatStore.minimizeCall()
+}
+
 function startDurationTimer() {
   durationTimer = setInterval(() => {
     callDuration.value++
+    // 更新store中的通话时长
+    chatStore.updateCallDuration(callDuration.value)
   }, 1000)
 }
 
@@ -413,15 +499,22 @@ function handleFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement
 }
 
+// 监听浮动窗口的挂断事件
+function handleFloatingHangup() {
+  handleHangup()
+}
+
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  window.addEventListener('call-hangup-from-floating', handleFloatingHangup)
 })
 
 onUnmounted(() => {
   endCall()
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  window.removeEventListener('call-hangup-from-floating', handleFloatingHangup)
 })
 
 // 暴露方法供外部调用
@@ -520,7 +613,7 @@ defineExpose({
 
 .local-video {
   position: absolute;
-  bottom: 10px;
+  top: 10px;
   right: 10px;
   width: 100px;
   height: 75px;
@@ -536,7 +629,7 @@ defineExpose({
 .local-video.video-main {
   width: 100%;
   height: 100%;
-  bottom: 0;
+  top: 0;
   right: 0;
   border-radius: 8px;
   z-index: 1;
@@ -545,7 +638,7 @@ defineExpose({
 /* 远程视频变成小画面 */
 .remote-video.video-small {
   position: absolute;
-  bottom: 10px;
+  top: 10px;
   right: 10px;
   width: 100px;
   height: 75px;

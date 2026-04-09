@@ -1,5 +1,7 @@
 <template>
   <router-view />
+  <!-- 浮动通话小窗 -->
+  <FloatingCallWindow />
 </template>
 
 <script setup>
@@ -7,6 +9,7 @@ import { watch, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
 import { notificationSound } from '@/utils/notificationSound'
+import FloatingCallWindow from '@/components/FloatingCallWindow.vue'
 
 const userStore = useUserStore()
 const chatStore = useChatStore()

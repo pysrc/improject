@@ -31,7 +31,16 @@ export const useChatStore = defineStore('chat', () => {
     targetUserId: '',
     targetUsername: '',
     incomingOffer: null,
-    callerUsername: ''
+    callerUsername: '',
+    isMinimized: false // 是否最小化为小窗
+  })
+
+  // 保存webrtc相关数据
+  const callWebrtcData = ref({
+    webrtc: null,       // WebRTC实例
+    localStream: null,  // 本地视频流
+    remoteStream: null, // 远程视频流
+    duration: 0         // 通话时长
   })
 
   // 远程信令（用于传递给 CallPanel）
@@ -157,7 +166,8 @@ export const useChatStore = defineStore('chat', () => {
       targetUserId: friend.friendId,
       targetUsername: friend.username,
       incomingOffer: null,
-      callerUsername: ''
+      callerUsername: '',
+      isMinimized: false
     }
   }
 
@@ -175,15 +185,63 @@ export const useChatStore = defineStore('chat', () => {
 
   // 结束通话
   function endCall() {
+    // 先结束webrtc连接
+    if (callWebrtcData.value.webrtc) {
+      callWebrtcData.value.webrtc.endCall()
+    }
+    // 清理视频流
+    if (callWebrtcData.value.localStream) {
+      callWebrtcData.value.localStream.getTracks().forEach(t => t.stop())
+    }
+    if (callWebrtcData.value.remoteStream) {
+      callWebrtcData.value.remoteStream.getTracks().forEach(t => t.stop())
+    }
+
     callState.value = {
       showCallPanel: false,
       callType: 'video',
       targetUserId: '',
       targetUsername: '',
       incomingOffer: null,
-      callerUsername: ''
+      callerUsername: '',
+      isMinimized: false
+    }
+    callWebrtcData.value = {
+      webrtc: null,
+      localStream: null,
+      remoteStream: null,
+      duration: 0
     }
     remoteSignal.value = null
+  }
+
+  // 最小化通话（切换到小窗模式）
+  function minimizeCall() {
+    // 先设置最小化标志
+    callState.value.isMinimized = true
+    // 延迟设置 showCallPanel，确保 isMinimized 先生效
+    setTimeout(() => {
+      callState.value.showCallPanel = false
+    }, 0)
+  }
+
+  // 恢复通话（从小窗恢复到全屏）
+  function restoreCall() {
+    callState.value.isMinimized = false
+    callState.value.showCallPanel = true
+  }
+
+  // 保存webrtc数据
+  function saveCallWebrtcData(data) {
+    if (data.webrtc !== undefined) callWebrtcData.value.webrtc = data.webrtc
+    if (data.localStream !== undefined) callWebrtcData.value.localStream = data.localStream
+    if (data.remoteStream !== undefined) callWebrtcData.value.remoteStream = data.remoteStream
+    if (data.duration !== undefined) callWebrtcData.value.duration = data.duration
+  }
+
+  // 更新通话时长
+  function updateCallDuration(duration) {
+    callWebrtcData.value.duration = duration
   }
 
   // 清除远程信令（CallPanel 处理后调用）
@@ -269,14 +327,22 @@ export const useChatStore = defineStore('chat', () => {
     console.log('[Call] Received signal:', signalType, 'from:', senderUsername)
 
     if (signalType === 'offer') {
-      // 收到通话邀请
+      // 收到新通话邀请，先清理之前的数据
+      callWebrtcData.value = {
+        webrtc: null,
+        localStream: null,
+        remoteStream: null,
+        duration: 0
+      }
+      // 设置新通话状态
       callState.value = {
         showCallPanel: true,
         callType: callType || 'video',
         targetUserId: senderId,
         targetUsername: senderUsername,
         incomingOffer: signalData,
-        callerUsername: senderUsername
+        callerUsername: senderUsername,
+        isMinimized: false
       }
     } else if (signalType === 'answer') {
       // 收到 Answer，通知 CallPanel 处理
@@ -556,6 +622,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // 通话相关
     callState,
+    callWebrtcData,
     remoteSignal,
     startCall,
     handleCallSignal,
@@ -563,6 +630,10 @@ export const useChatStore = defineStore('chat', () => {
     clearRemoteSignal,
     handleSSEEvent,
     handleCallEvent,
+    minimizeCall,
+    restoreCall,
+    saveCallWebrtcData,
+    updateCallDuration,
 
     // SSE 连接
     sseConnection,

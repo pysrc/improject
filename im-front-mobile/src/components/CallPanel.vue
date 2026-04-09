@@ -97,6 +97,17 @@
           <van-icon name="replay" size="24" />
           <span class="btn-label">切换摄像头</span>
         </van-button>
+        <!-- 最小化按钮（仅视频通话） -->
+        <van-button
+          v-if="callType === 'video'"
+          type="default"
+          round
+          class="control-btn"
+          @click="handleMinimize"
+        >
+          <van-icon name="minus" size="24" />
+          <span class="btn-label">小窗</span>
+        </van-button>
         <!-- 挂断按钮 -->
         <van-button type="danger" round class="control-btn hangup-btn" @click="handleHangup">
           <van-icon name="phone-o" size="24" class="rotate-icon" />
@@ -108,11 +119,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { showToast } from 'vant'
 import WebRTCManager from '@/utils/webrtc'
 import { webrtcApi } from '@/api/modules'
 import { ringtone } from '@/utils/ringtone'
+import { useChatStore } from '@/stores/chat'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -125,6 +137,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'hangup', 'signal'])
 
+const chatStore = useChatStore()
 const visible = ref(props.show)
 const callState = ref('idle')
 const audioEnabled = ref(true)
@@ -149,12 +162,20 @@ const isMobile = computed(() => {
 // 当前摄像头方向
 const facingMode = ref('user')
 
-watch(() => props.show, (val) => {
+watch(() => props.show, (val, oldVal) => {
   visible.value = val
   if (val) {
-    initCall()
+    // 如果有保存的webrtc数据，说明是从最小化恢复
+    if (chatStore.callWebrtcData.webrtc) {
+      restoreVideoDisplay()
+    } else {
+      initCall()
+    }
   } else {
-    endCall()
+    // 只有当不是最小化状态时才结束通话
+    if (!chatStore.callState.isMinimized) {
+      endCall()
+    }
   }
 })
 
@@ -167,6 +188,8 @@ function initCall() {
 
   webrtc.onRemoteStream = (stream) => {
     console.log('[WebRTC] Remote stream received')
+    // 保存远程视频流
+    chatStore.saveCallWebrtcData({ remoteStream: stream })
     setTimeout(() => {
       if (remoteVideoRef.value) {
         remoteVideoRef.value.srcObject = stream
@@ -185,6 +208,8 @@ function initCall() {
     console.log('[WebRTC] Connection state:', state)
     if (state === 'connected') {
       callState.value = 'connected'
+      // 保存webrtc实例
+      chatStore.saveCallWebrtcData({ webrtc: webrtc })
       startDurationTimer()
     } else if (state === 'disconnected' || state === 'closed' || state === 'failed') {
       handleCallEnded()
@@ -209,12 +234,52 @@ function initCall() {
   }
 }
 
+// 从最小化恢复时恢复视频显示
+function restoreVideoDisplay() {
+  callState.value = 'connected'
+  // 从store恢复webrtc实例
+  webrtc = chatStore.callWebrtcData.webrtc
+
+  // 优先从webrtc实例获取远程流
+  const remoteStream = webrtc?.remoteStream || chatStore.callWebrtcData.remoteStream
+
+  // 等待DOM准备好
+  setTimeout(() => {
+    if (remoteStream && remoteVideoRef.value) {
+      // 确保音频轨道是启用的
+      remoteStream.getAudioTracks().forEach(track => {
+        track.enabled = true
+      })
+      remoteVideoRef.value.srcObject = remoteStream
+      // 确保视频元素不是静音的
+      remoteVideoRef.value.muted = false
+    }
+    // 恢复本地视频流
+    const localStream = webrtc?.localStream || chatStore.callWebrtcData.localStream
+    if (localStream && localVideoRef.value) {
+      localVideoRef.value.srcObject = localStream
+      // 本地视频始终静音（避免回声）
+      localVideoRef.value.muted = true
+    }
+  }, 50)
+
+  // 恢复通话时长
+  callDuration.value = chatStore.callWebrtcData.duration
+  // 恢复计时器
+  if (!durationTimer) {
+    startDurationTimer()
+  }
+}
+
 async function startCall() {
   callState.value = 'calling'
 
   try {
     await webrtc.initIceServers(webrtcApi.getIceConfig)
     const stream = await getLocalStream(props.callType)
+
+    // 保存本地视频流
+    chatStore.saveCallWebrtcData({ localStream: stream })
 
     setTimeout(() => {
       if (localVideoRef.value && props.callType === 'video') {
@@ -267,6 +332,9 @@ async function handleAccept() {
 
     const streamType = props.callType === 'screen' ? 'audio' : props.callType
     const stream = await getLocalStream(streamType)
+
+    // 保存本地视频流
+    chatStore.saveCallWebrtcData({ localStream: stream })
 
     setTimeout(() => {
       if (localVideoRef.value && props.callType === 'video') {
@@ -338,6 +406,17 @@ function toggleVideo() {
 function toggleMainVideo() {
   if (props.callType !== 'video') return
   isMainLocal.value = !isMainLocal.value
+}
+
+// 最小化通话（切换到小窗模式）
+function handleMinimize() {
+  if (props.callType !== 'video') return
+
+  // 保存当前通话时长
+  chatStore.updateCallDuration(callDuration.value)
+
+  // 最小化
+  chatStore.minimizeCall()
 }
 
 // 切换前后摄像头
@@ -415,6 +494,8 @@ async function switchCamera() {
 function startDurationTimer() {
   durationTimer = setInterval(() => {
     callDuration.value++
+    // 更新store中的通话时长
+    chatStore.updateCallDuration(callDuration.value)
   }, 1000)
 }
 
@@ -440,8 +521,18 @@ function endCall() {
   stopDurationTimer()
 }
 
+// 监听浮动窗口的挂断事件
+function handleFloatingHangup() {
+  handleHangup()
+}
+
+onMounted(() => {
+  window.addEventListener('call-hangup-from-floating', handleFloatingHangup)
+})
+
 onUnmounted(() => {
   endCall()
+  window.removeEventListener('call-hangup-from-floating', handleFloatingHangup)
 })
 
 defineExpose({
@@ -477,7 +568,7 @@ defineExpose({
 
 .local-video {
   position: absolute;
-  bottom: 100px;
+  top: 20px;
   right: 20px;
   width: 120px;
   height: 160px;
@@ -493,7 +584,7 @@ defineExpose({
 .local-video.video-main {
   width: 100%;
   height: 100%;
-  bottom: 0;
+  top: 0;
   right: 0;
   border-radius: 0;
   z-index: 1;
@@ -502,7 +593,7 @@ defineExpose({
 /* 远程视频变成小画面 */
 .remote-video.video-small {
   position: absolute;
-  bottom: 100px;
+  top: 20px;
   right: 20px;
   width: 120px;
   height: 160px;
