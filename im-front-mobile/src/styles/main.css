@@ -4,7 +4,14 @@
   box-sizing: border-box;
 }
 
-html, body, #app {
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: fixed;
+}
+
+#app {
   height: 100%;
   width: 100%;
 }
@@ -33,4 +40,10 @@ input, textarea {
 
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 防止弹窗溢出 */
+.van-popup, .van-action-sheet, .van-image-preview {
+  max-height: 100vh;
+  max-width: 100vw;
 }

@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showSuccessToast, showFailToast, showConfirmDialog } from 'vant'
 import { useUserStore } from '@/stores/user'
@@ -269,11 +269,6 @@ onMounted(async () => {
   await chatStore.loadUnreadCounts()
   await chatStore.loadGroups()
   await chatStore.loadGroupInvites()
-  chatStore.connectSSE(userStore.token)
-})
-
-onUnmounted(() => {
-  chatStore.disconnectSSE()
 })
 
 function onActionSelect(action) {
@@ -457,8 +452,34 @@ watch(() => chatStore.remoteSignal, (signal) => {
 
 <style scoped>
 .home-page {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
   background: #f5f5f5;
+}
+
+.home-page .van-nav-bar {
+  flex-shrink: 0;
+}
+
+.home-page .van-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-page :deep(.van-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.home-page :deep(.van-tab__pane) {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .request-section {

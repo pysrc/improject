@@ -192,13 +192,23 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function receiveMessage(msg) {
+    console.log('[ChatStore] receiveMessage:', msg)
     const friendId = msg.senderId
     if (!messages.value[friendId]) {
       messages.value[friendId] = []
     }
     messages.value[friendId].push(msg)
-    // 如果不是当前选中的好友，增加未读计数并播放提示音
-    if (!currentFriend.value || currentFriend.value.friendId !== friendId) {
+
+    // 如果当前正在和发送者聊天，标记已读
+    if (currentFriend.value && currentFriend.value.friendId === friendId) {
+      console.log('[ChatStore] 当前正在和发送者聊天，标记已读')
+      // 调用 API 标记已读
+      messageApi.markRead(friendId).catch(err => {
+        console.error('标记已读失败:', err)
+      })
+    } else {
+      // 不是当前选中的好友，增加未读计数并播放提示音
+      console.log('[ChatStore] 不是当前聊天好友，增加未读计数并播放提示音')
       unreadCounts.value[friendId] = (unreadCounts.value[friendId] || 0) + 1
       notificationSound.play()
     }
@@ -455,13 +465,23 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function receiveGroupMessage(msg) {
+    console.log('[ChatStore] receiveGroupMessage:', msg)
     const groupId = msg.groupId
     if (!groupMessages.value[groupId]) {
       groupMessages.value[groupId] = []
     }
     groupMessages.value[groupId].push(msg)
-    // 如果不是当前选中的群组，增加未读计数并播放提示音
-    if (!currentGroup.value || currentGroup.value.groupId !== groupId) {
+
+    // 如果当前正在和该群聊天，标记已读
+    if (currentGroup.value && currentGroup.value.groupId === groupId) {
+      console.log('[ChatStore] 当前正在和该群聊天，标记已读')
+      // 调用 API 标记已读
+      messageApi.markGroupRead(groupId).catch(err => {
+        console.error('标记群消息已读失败:', err)
+      })
+    } else {
+      // 不是当前选中的群组，增加未读计数并播放提示音
+      console.log('[ChatStore] 不是当前聊天群组，增加未读计数并播放提示音')
       groupUnreadCounts.value[groupId] = (groupUnreadCounts.value[groupId] || 0) + 1
       notificationSound.play()
     }

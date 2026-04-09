@@ -48,7 +48,13 @@ export const messageApi = {
     api.post('/message/send-file', { receiverId, fileId }),
 
   clear: (friendId) =>
-    api.post('/message/clear', { friendId })
+    api.post('/message/clear', { friendId }),
+
+  markRead: (friendId) =>
+    api.post('/message/mark-read', { friendId }),
+
+  markGroupRead: (groupId) =>
+    api.post('/message/mark-group-read', { groupId })
 }
 
 export const fileApi = {

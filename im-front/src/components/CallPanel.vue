@@ -110,6 +110,7 @@ import { useMessage } from 'naive-ui'
 import { CallOutline, CloseOutline, MicOutline, MicOffOutline, VideocamOutline, VideocamOffOutline, ExpandOutline, ContractOutline } from '@vicons/ionicons5'
 import WebRTCManager from '@/utils/webrtc'
 import { webrtcApi } from '@/api/modules'
+import { ringtone } from '@/utils/ringtone'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -197,8 +198,9 @@ function initCall() {
 
   // 判断是发起通话还是接听通话
   if (props.incomingOffer) {
-    // 接听通话
+    // 接听通话 - 播放来电铃声
     callState.value = 'incoming'
+    ringtone.start()
   } else {
     // 发起通话
     startCall()
@@ -245,6 +247,7 @@ async function startCall() {
 }
 
 async function handleAccept() {
+  ringtone.stop() // 停止铃声
   callState.value = 'connecting'
 
   try {
@@ -286,6 +289,7 @@ async function handleAccept() {
 }
 
 function handleReject() {
+  ringtone.stop() // 停止铃声
   emit('signal', { signalType: 'reject' })
   handleCallEnded()
 }
@@ -296,6 +300,7 @@ function handleHangup() {
 }
 
 function handleCallEnded() {
+  ringtone.stop() // 停止铃声
   stopDurationTimer()
   callState.value = 'ended'
 
@@ -352,6 +357,7 @@ function formatDuration(seconds) {
 }
 
 function endCall() {
+  ringtone.stop() // 停止铃声
   if (webrtc) {
     webrtc.endCall()
     webrtc = null

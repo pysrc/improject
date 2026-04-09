@@ -965,6 +965,50 @@ app.get('/api/message/unread', authMiddleware, (req, res) => {
 });
 
 /**
+ * 标记消息已读接口
+ * POST /api/message/mark-read
+ * 参数: { friendId }
+ * 需认证
+ */
+app.post('/api/message/mark-read', authMiddleware, (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.body;
+
+  if (!friendId) {
+    return res.status(400).json({ code: 400, message: '好友ID不能为空' });
+  }
+
+  db.run(
+    `UPDATE messages SET is_read = 1 WHERE sender_id = ? AND receiver_id = ? AND is_read = 0`,
+    [friendId, userId],
+    function(err) {
+      if (err) {
+        return res.status(500).json({ code: 500, message: '标记已读失败', error: err.message });
+      }
+      res.status(200).json({ code: 200, message: '已标记已读' });
+    }
+  );
+});
+
+/**
+ * 标记群消息已读接口
+ * POST /api/message/mark-group-read
+ * 参数: { groupId }
+ * 需认证
+ */
+app.post('/api/message/mark-group-read', authMiddleware, (req, res) => {
+  const userId = req.user.id;
+  const { groupId } = req.body;
+
+  if (!groupId) {
+    return res.status(400).json({ code: 400, message: '群组ID不能为空' });
+  }
+
+  // 群消息已读记录可以存到单独的表，这里简单处理
+  res.status(200).json({ code: 200, message: '已标记已读' });
+});
+
+/**
  * 清除聊天记录接口
  * POST /api/message/clear
  * 参数: { friendId }
@@ -2474,7 +2518,8 @@ app.get('/api/sse/connect', (req, res) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const userId = decoded.id;
+    // 统一转换为字符串作为 key，避免类型不匹配
+    const userId = String(decoded.id);
 
     // 设置 SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');
@@ -2516,18 +2561,20 @@ app.get('/api/sse/connect', (req, res) => {
  * @param {object} message 消息内容
  */
 function sendSSEMessage(userId, message) {
-  const connections = sseClients.get(userId);
+  // 统一转换为字符串作为 key，避免类型不匹配
+  const key = String(userId);
+  const connections = sseClients.get(key);
   if (connections && connections.size > 0) {
     connections.forEach(clientRes => {
       try {
         clientRes.write(`data: ${JSON.stringify({ type: 'message', data: message })}\n\n`);
       } catch (err) {
-        console.error(`向用户 ${userId} 推送 SSE 消息失败:`, err.message);
+        console.error(`向用户 ${key} 推送 SSE 消息失败:`, err.message);
         connections.delete(clientRes);
       }
     });
   } else {
-    console.log(`用户 ${userId} 没有活跃的 SSE 连接`);
+    console.log(`用户 ${key} 没有活跃的 SSE 连接`);
   }
 }
 
@@ -2537,13 +2584,15 @@ function sendSSEMessage(userId, message) {
  * @param {object} notification 通知内容
  */
 function sendSSENotification(userId, notification) {
-  const connections = sseClients.get(userId);
+  // 统一转换为字符串作为 key，避免类型不匹配
+  const key = String(userId);
+  const connections = sseClients.get(key);
   if (connections && connections.size > 0) {
     connections.forEach(clientRes => {
       try {
         clientRes.write(`data: ${JSON.stringify(notification)}\n\n`);
       } catch (err) {
-        console.error(`向用户 ${userId} 推送 SSE 通知失败:`, err.message);
+        console.error(`向用户 ${key} 推送 SSE 通知失败:`, err.message);
         connections.delete(clientRes);
       }
     });

@@ -41,11 +41,10 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
-import { useChatStore } from '@/stores/chat'
+import { notificationSound } from '@/utils/notificationSound'
 
 const router = useRouter()
 const userStore = useUserStore()
-const chatStore = useChatStore()
 
 const loading = ref(false)
 const form = ref({
@@ -57,7 +56,8 @@ async function handleLogin() {
   try {
     loading.value = true
     await userStore.login(form.value.username, form.value.password)
-    chatStore.connectSSE(userStore.token)
+    // 初始化音频上下文（需要用户交互后）
+    notificationSound.init()
     showToast('登录成功')
     router.push('/')
   } catch (error) {
@@ -74,10 +74,12 @@ function goToRegister() {
 
 <style scoped>
 .login-page {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  overflow-x: hidden;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
 }

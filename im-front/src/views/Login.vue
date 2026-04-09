@@ -73,13 +73,24 @@ function goToRegister() {
 <style scoped>
 .login-container {
   height: 100vh;
+  width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow: hidden;
 }
 
 .login-card {
   width: 400px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+}
+
+@media screen and (max-width: 768px) {
+  .login-card {
+    width: calc(100vw - 32px);
+    max-width: none;
+  }
 }
 </style>

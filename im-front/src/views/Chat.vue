@@ -1,7 +1,10 @@
 <template>
   <div class="chat-container">
+    <!-- 移动端侧边栏遮罩 -->
+    <div v-if="showMobileSidebar" class="mobile-sidebar-overlay" @click="showMobileSidebar = false"></div>
+
     <!-- 左侧好友/群组列表 -->
-    <div class="sidebar">
+    <div :class="['sidebar', { 'sidebar-mobile': showMobileSidebar }]">
       <div class="sidebar-header">
         <div class="user-info" @click="showProfileModal = true">
           <n-avatar round size="small" :src="getAvatarUrl(userStore.avatar)" />
@@ -141,10 +144,10 @@
     </div>
 
     <!-- 右侧聊天区域 -->
-    <div class="chat-main" @click.self="chatStore.clearSelection">
+    <div class="chat-main">
       <!-- 空状态 -->
       <template v-if="!chatStore.currentFriend && !chatStore.currentGroup">
-        <div class="empty-chat" @click="chatStore.clearSelection">
+        <div class="empty-chat">
           <div class="empty-content">
             <div class="empty-icon">💬</div>
             <div class="empty-title">欢迎使用即时通讯</div>
@@ -156,12 +159,17 @@
       <!-- 私聊界面 -->
       <template v-else-if="chatStore.chatType === 'friend' && chatStore.currentFriend">
         <div class="chat-header">
+          <n-button class="mobile-back-btn" size="small" quaternary @click="showMobileSidebar = true">
+            <template #icon>
+              <n-icon><EllipsisVertical /></n-icon>
+            </template>
+          </n-button>
           <span>{{ chatStore.currentFriend.remark || chatStore.currentFriend.username }}</span>
           <n-dropdown :options="friendOptions" @select="handleFriendAction">
             <n-button size="small">更多</n-button>
           </n-dropdown>
         </div>
-        <div class="message-list" ref="messageListRef" @click.self="chatStore.clearSelection">
+        <div class="message-list" ref="messageListRef">
           <div
             v-for="msg in currentMessages"
             :key="msg.id"
@@ -262,12 +270,17 @@
       <!-- 群聊界面 -->
       <template v-if="chatStore.chatType === 'group' && chatStore.currentGroup">
         <div class="chat-header">
+          <n-button class="mobile-back-btn" size="small" quaternary @click="showMobileSidebar = true">
+            <template #icon>
+              <n-icon><EllipsisVertical /></n-icon>
+            </template>
+          </n-button>
           <span>{{ chatStore.currentGroup.groupName }}</span>
           <n-dropdown :options="groupOptions" @select="handleGroupAction">
             <n-button size="small">群管理</n-button>
           </n-dropdown>
         </div>
-        <div class="message-list" ref="messageListRef" @click.self="chatStore.clearSelection">
+        <div class="message-list" ref="messageListRef">
           <div
             v-for="msg in currentMessages"
             :key="msg.id"
@@ -546,6 +559,7 @@ const chatStore = useChatStore()
 const inputMessage = ref('')
 const messageListRef = ref(null)
 const sidebarTab = ref('friends')
+const showMobileSidebar = ref(false)
 
 // 好友相关弹窗
 const showAddFriendModal = ref(false)
@@ -750,7 +764,16 @@ watch(() => chatStore.currentGroup, async (group) => {
 
 watch(currentMessages, () => {
   nextTick(scrollToBottom)
-})
+}, { deep: true })
+
+// 监听 store 中消息变化
+watch(() => chatStore.messages, () => {
+  nextTick(scrollToBottom)
+}, { deep: true })
+
+watch(() => chatStore.groupMessages, () => {
+  nextTick(scrollToBottom)
+}, { deep: true })
 
 // 监听输入 @ 符号
 watch(inputMessage, (val) => {
@@ -770,10 +793,12 @@ watch(inputMessage, (val) => {
 
 function selectFriend(friend) {
   chatStore.selectFriend(friend)
+  showMobileSidebar.value = false
 }
 
 function selectGroup(group) {
   chatStore.selectGroup(group)
+  showMobileSidebar.value = false
 }
 
 // ====================== 群组相关方法 ======================
@@ -1173,7 +1198,12 @@ function formatFileSize(size) {
 
 function scrollToBottom() {
   if (messageListRef.value) {
-    messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    // 使用 setTimeout 确保 DOM 已更新
+    setTimeout(() => {
+      if (messageListRef.value) {
+        messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+      }
+    }, 50)
   }
 }
 
@@ -1433,13 +1463,11 @@ watch(() => chatStore.remoteSignal, (signal) => {
 
 <style scoped>
 .chat-container {
-  height: calc(100vh - 32px);
+  height: 100vh;
+  width: 100vw;
   display: flex;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   overflow: hidden;
-  margin: 16px;
-  border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar {
@@ -1574,6 +1602,10 @@ watch(() => chatStore.remoteSignal, (signal) => {
   font-size: 18px;
   font-weight: 600;
   color: #333;
+}
+
+.mobile-back-btn {
+  display: none;
 }
 
 .message-list {
@@ -1717,17 +1749,19 @@ watch(() => chatStore.remoteSignal, (signal) => {
   justify-content: space-between;
   align-items: center;
   margin-top: 12px;
+  gap: 8px;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .toolbar-left .n-button {
   border-radius: 10px;
   transition: all 0.3s ease;
+  font-size: 13px;
 }
 
 .toolbar-left .n-button:hover {
@@ -1933,5 +1967,104 @@ watch(() => chatStore.remoteSignal, (signal) => {
 
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+/* 移动端适配 */
+@media screen and (max-width: 768px) {
+  .chat-container {
+    border-radius: 0;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -300px;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    border-radius: 0;
+  }
+
+  .sidebar-mobile {
+    left: 0;
+  }
+
+  .mobile-sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .chat-main {
+    width: 100vw;
+  }
+
+  .chat-header {
+    padding: 12px 16px;
+  }
+
+  .chat-header span {
+    font-size: 16px;
+  }
+
+  .mobile-back-btn {
+    display: flex;
+  }
+
+  .message-list {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .message {
+    max-width: 85%;
+    padding: 10px 14px;
+  }
+
+  .message-image {
+    max-width: 180px;
+  }
+
+  .chat-input-area {
+    padding: 12px;
+  }
+
+  .chat-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .toolbar-left .n-button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .chat-toolbar .n-button[type="primary"] {
+    padding: 6px 16px;
+  }
+
+  .empty-icon {
+    font-size: 60px;
+  }
+
+  .empty-title {
+    font-size: 18px;
+  }
+
+  .empty-desc {
+    font-size: 14px;
+  }
+
+  .empty-content {
+    padding: 20px;
+  }
 }
 </style>

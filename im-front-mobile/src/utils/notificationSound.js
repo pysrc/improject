@@ -5,24 +5,54 @@ class NotificationSound {
     this.enabled = true
   }
 
-  // 初始化 AudioContext
+  // 初始化 AudioContext（需要在用户交互后调用）
   init() {
     if (!this.audioContext) {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      console.log('[NotificationSound] AudioContext created, state:', this.audioContext.state)
     }
+
+    // 尝试解锁 AudioContext
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().then(() => {
+        console.log('[NotificationSound] AudioContext resumed')
+      }).catch(err => {
+        console.warn('[NotificationSound] AudioContext resume failed:', err)
+      })
+    }
+
     return this.audioContext
   }
 
   // 播放提示音
   play() {
-    if (!this.enabled) return
+    if (!this.enabled) {
+      console.log('[NotificationSound] Sound disabled')
+      return
+    }
 
     try {
       const ctx = this.init()
-      if (ctx.state === 'suspended') {
-        ctx.resume()
-      }
+      console.log('[NotificationSound] Playing sound, context state:', ctx.state)
 
+      // 如果仍然是 suspended 状态，尝试 resume 后再播放
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          this._playSound(ctx)
+        }).catch(err => {
+          console.warn('[NotificationSound] Resume failed:', err)
+        })
+      } else {
+        this._playSound(ctx)
+      }
+    } catch (e) {
+      console.warn('[NotificationSound] Play failed:', e)
+    }
+  }
+
+  // 实际播放声音
+  _playSound(ctx) {
+    try {
       // 创建振荡器生成简单的提示音
       const oscillator = ctx.createOscillator()
       const gainNode = ctx.createGain()
@@ -41,8 +71,10 @@ class NotificationSound {
       // 播放
       oscillator.start(ctx.currentTime)
       oscillator.stop(ctx.currentTime + 0.2)
+
+      console.log('[NotificationSound] Sound played successfully')
     } catch (e) {
-      console.warn('播放提示音失败:', e)
+      console.warn('[NotificationSound] _playSound failed:', e)
     }
   }
 

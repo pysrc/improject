@@ -750,15 +750,28 @@ async function handleCallSignal(signal) {
 
 <style scoped>
 .chat-page {
-  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: #f5f5f5;
+}
+
+.chat-page :deep(.van-nav-bar) {
+  flex-shrink: 0;
+  position: static;
 }
 
 .message-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -819,7 +832,7 @@ async function handleCallSignal(signal) {
   max-width: 200px;
 }
 
-.message-image .van-image {
+.message-image :deep(.van-image) {
   border-radius: 4px;
 }
 
@@ -875,6 +888,7 @@ async function handleCallSignal(signal) {
 }
 
 .chat-input-area {
+  flex-shrink: 0;
   background: #fff;
   padding: 10px 16px;
   display: flex;
@@ -883,7 +897,7 @@ async function handleCallSignal(signal) {
   border-top: 1px solid #eee;
 }
 
-.chat-input-area .van-field {
+.chat-input-area :deep(.van-field) {
   flex: 1;
   background: #f5f5f5;
   border-radius: 8px;
@@ -909,7 +923,7 @@ async function handleCallSignal(signal) {
   background: #ee0a24;
 }
 
-.voice-btn-recording .van-icon {
+.voice-btn-recording :deep(.van-icon) {
   color: #fff;
 }
 
@@ -917,7 +931,7 @@ async function handleCallSignal(signal) {
   background: #999;
 }
 
-.voice-btn-cancel .van-icon {
+.voice-btn-cancel :deep(.van-icon) {
   color: #fff;
 }
 

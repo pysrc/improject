@@ -28,20 +28,26 @@
       </div>
 
       <!-- 来电 -->
-      <div v-else-if="callState === 'incoming'" class="call-status-screen">
+      <div v-else-if="callState === 'incoming'" class="call-status-screen incoming-screen">
         <van-avatar size="80" round />
         <div class="call-name">{{ callerUsername }}</div>
         <div class="call-status-text">
           {{ callType === 'video' ? '视频通话' : (callType === 'screen' ? '投屏通话' : '语音通话') }}
         </div>
-        <van-space direction="vertical" size="large" fill>
-          <van-button type="success" round size="large" block @click="handleAccept">
-            <van-icon name="phone-o" size="24" />
-          </van-button>
-          <van-button type="danger" round size="large" block @click="handleReject">
-            <van-icon name="cross" size="24" />
-          </van-button>
-        </van-space>
+        <div class="incoming-actions">
+          <div class="action-btn-wrapper">
+            <van-button type="success" round class="accept-btn" @click="handleAccept">
+              <van-icon name="phone-o" size="28" />
+            </van-button>
+            <span class="action-label">接听</span>
+          </div>
+          <div class="action-btn-wrapper">
+            <van-button type="danger" round class="reject-btn" @click="handleReject">
+              <van-icon name="phone-o" size="28" class="rotate-icon" />
+            </van-button>
+            <span class="action-label">挂断</span>
+          </div>
+        </div>
       </div>
 
       <!-- 语音通话 -->
@@ -59,24 +65,43 @@
 
       <!-- 通话控制 -->
       <div v-show="callState === 'connected'" class="call-controls safe-area-bottom">
-        <van-space size="large">
-          <!-- 静音按钮 -->
-          <van-button :type="audioEnabled ? 'primary' : 'danger'" round @click="toggleAudio">
-            <van-icon :name="audioEnabled ? 'volume-o' : 'volume-discount-o'" size="20" />
-          </van-button>
-          <!-- 视频开关（仅视频通话） -->
-          <van-button v-if="callType === 'video'" :type="videoEnabled ? 'primary' : 'danger'" round @click="toggleVideo">
-            <van-icon :name="videoEnabled ? 'video' : 'video-discount-o'" size="20" />
-          </van-button>
-          <!-- 切换摄像头（仅视频通话且移动端） -->
-          <van-button v-if="callType === 'video' && isMobile" type="primary" round @click="switchCamera">
-            <van-icon name="replay" size="20" />
-          </van-button>
-          <!-- 挂断按钮 -->
-          <van-button type="danger" round size="large" @click="handleHangup">
-            <van-icon name="cross" size="24" />
-          </van-button>
-        </van-space>
+        <!-- 静音按钮 -->
+        <van-button
+          :type="audioEnabled ? 'default' : 'danger'"
+          round
+          class="control-btn"
+          @click="toggleAudio"
+        >
+          <van-icon :name="audioEnabled ? 'volume-o' : 'volume-discount-o'" size="24" />
+          <span class="btn-label">{{ audioEnabled ? '静音' : '取消静音' }}</span>
+        </van-button>
+        <!-- 视频开关（仅视频通话） -->
+        <van-button
+          v-if="callType === 'video'"
+          :type="videoEnabled ? 'default' : 'danger'"
+          round
+          class="control-btn"
+          @click="toggleVideo"
+        >
+          <van-icon :name="videoEnabled ? 'video' : 'video-discount-o'" size="24" />
+          <span class="btn-label">{{ videoEnabled ? '关闭视频' : '开启视频' }}</span>
+        </van-button>
+        <!-- 切换摄像头（仅视频通话且移动端） -->
+        <van-button
+          v-if="callType === 'video' && isMobile"
+          type="default"
+          round
+          class="control-btn"
+          @click="switchCamera"
+        >
+          <van-icon name="replay" size="24" />
+          <span class="btn-label">切换摄像头</span>
+        </van-button>
+        <!-- 挂断按钮 -->
+        <van-button type="danger" round class="control-btn hangup-btn" @click="handleHangup">
+          <van-icon name="phone-o" size="24" class="rotate-icon" />
+          <span class="btn-label">挂断</span>
+        </van-button>
       </div>
     </div>
   </van-popup>
@@ -87,6 +112,7 @@ import { ref, watch, onUnmounted, computed } from 'vue'
 import { showToast } from 'vant'
 import WebRTCManager from '@/utils/webrtc'
 import { webrtcApi } from '@/api/modules'
+import { ringtone } from '@/utils/ringtone'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -176,6 +202,7 @@ function initCall() {
 
   if (props.incomingOffer) {
     callState.value = 'incoming'
+    ringtone.start() // 播放来电铃声
   } else {
     startCall()
   }
@@ -231,6 +258,7 @@ async function getLocalStream(type) {
 }
 
 async function handleAccept() {
+  ringtone.stop() // 停止铃声
   callState.value = 'connecting'
 
   try {
@@ -260,6 +288,7 @@ async function handleAccept() {
 }
 
 function handleReject() {
+  ringtone.stop() // 停止铃声
   emit('signal', { signalType: 'reject' })
   handleCallEnded()
 }
@@ -270,6 +299,7 @@ function handleHangup() {
 }
 
 function handleCallEnded() {
+  ringtone.stop() // 停止铃声
   stopDurationTimer()
   callState.value = 'ended'
 
@@ -394,6 +424,7 @@ function formatDuration(seconds) {
 }
 
 function endCall() {
+  ringtone.stop() // 停止铃声
   if (webrtc) {
     webrtc.endCall()
     webrtc = null
@@ -458,6 +489,58 @@ defineExpose({
   padding: 20px;
 }
 
+.incoming-screen {
+  height: 100%;
+  justify-content: space-between;
+  padding: 60px 20px 40px;
+}
+
+.incoming-actions {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  margin-top: auto;
+}
+
+.action-btn-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.accept-btn,
+.reject-btn {
+  width: 72px;
+  height: 72px;
+  border: none;
+}
+
+.accept-btn {
+  background: #07c160;
+}
+
+.accept-btn:active {
+  background: #06ad56;
+}
+
+.reject-btn {
+  background: #ee0a24;
+}
+
+.reject-btn:active {
+  background: #d60a1e;
+}
+
+.action-label {
+  font-size: 14px;
+  color: #fff;
+}
+
+.rotate-icon {
+  transform: rotate(135deg);
+}
+
 .call-name {
   font-size: 24px;
   font-weight: 600;
@@ -489,9 +572,47 @@ defineExpose({
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 30px 20px;
+  padding: 30px 16px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
   display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.control-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  width: 70px;
+  height: 70px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+}
+
+.control-btn:active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.control-btn.hangup-btn {
+  background: #ee0a24;
+}
+
+.control-btn.hangup-btn:active {
+  background: #d60a1e;
+}
+
+.btn-label {
+  font-size: 11px;
+  margin-top: 6px;
+  color: #fff;
+}
+
+.rotate-icon {
+  transform: rotate(135deg);
 }
 </style>
