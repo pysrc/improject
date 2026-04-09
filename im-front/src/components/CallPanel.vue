@@ -3,9 +3,9 @@
     <div class="call-panel" ref="panelRef">
       <!-- 视频容器 - 始终渲染，用 v-show 控制显示 -->
       <div v-show="callState === 'connected' && (callType === 'video' || callType === 'screen')" class="video-container" ref="videoContainerRef">
-        <video ref="remoteVideoRef" class="remote-video" autoplay playsinline />
+        <video ref="remoteVideoRef" :class="['remote-video', { 'video-small': isMainLocal }]" autoplay playsinline @click="toggleMainVideo" />
         <!-- 投屏模式不显示本地小视频窗口 -->
-        <video v-if="callType === 'video'" ref="localVideoRef" class="local-video" autoplay playsinline muted />
+        <video v-if="callType === 'video'" ref="localVideoRef" :class="['local-video', { 'video-main': isMainLocal }]" autoplay playsinline muted @click="toggleMainVideo" />
       </div>
 
       <!-- 正在呼叫状态 -->
@@ -134,6 +134,7 @@ const remoteVideoRef = ref(null)
 const panelRef = ref(null)
 const videoContainerRef = ref(null)
 const isFullscreen = ref(false)
+const isMainLocal = ref(false) // 主画面是否显示本地视频
 
 let webrtc = null
 let durationTimer = null
@@ -303,6 +304,7 @@ function handleCallEnded() {
   ringtone.stop() // 停止铃声
   stopDurationTimer()
   callState.value = 'ended'
+  isMainLocal.value = false // 重置画面状态
 
   setTimeout(() => {
     visible.value = false
@@ -335,6 +337,12 @@ function toggleAudio() {
 
 function toggleVideo() {
   videoEnabled.value = webrtc.toggleVideo()
+}
+
+// 切换主画面（点击小窗口切换大小画面）
+function toggleMainVideo() {
+  if (props.callType !== 'video') return
+  isMainLocal.value = !isMainLocal.value
 }
 
 function startDurationTimer() {
@@ -520,6 +528,31 @@ defineExpose({
   background: #000;
   border: 2px solid #fff;
   object-fit: cover;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+/* 本地视频变成主画面 */
+.local-video.video-main {
+  width: 100%;
+  height: 100%;
+  bottom: 0;
+  right: 0;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* 远程视频变成小画面 */
+.remote-video.video-small {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 100px;
+  height: 75px;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  z-index: 10;
+  cursor: pointer;
 }
 
 .audio-container {
